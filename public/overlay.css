@@ -385,7 +385,8 @@ html, body{
 .bug-main{
   display: flex;
   align-items: stretch;
-  height: 92px;
+  height: auto;
+  min-height: 92px;
   background: transparent;
   /* Outer shape kept via child panels so the center can punch transparent for a clock camera */
 }
@@ -580,13 +581,14 @@ html, body{
 .period{
   font-family: 'Inter', sans-serif;
   font-weight: 700;
-  font-size: 11px;
+  font-size: var(--period-size, 11px);
+  line-height: 1;
   letter-spacing: 0.12em;
   color: var(--ink-dim);
   margin-bottom: 0;
 }
 .period.pregame-label{
-  font-size: 9px;
+  font-size: calc(var(--period-size, 11px) * 0.82);
   letter-spacing: 0.08em;
   text-align: center;
   white-space: normal;

@@ -71,6 +71,10 @@
     const orientation = ['bottom', 'top', 'stack'].includes(a.orientation) ? a.orientation : 'bottom';
     bug.classList.remove('orient-bottom', 'orient-top', 'orient-stack');
     bug.classList.add('orient-' + orientation);
+
+    const rawSize = Number(a.periodFontSize);
+    const periodSize = Number.isFinite(rawSize) ? Math.min(28, Math.max(8, Math.round(rawSize))) : 11;
+    root.style.setProperty('--period-size', periodSize + 'px');
   }
 
   function formatRecord(team, toggles) {
