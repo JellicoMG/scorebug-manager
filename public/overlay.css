@@ -80,12 +80,12 @@ html, body{
 .celeb-banner.kind-basket .celeb-label{ display: none; }
 .celeb-banner.kind-points .celeb-points,
 .celeb-banner.kind-basket .celeb-points{
-  font-size: 34px;
+  font-size: var(--font-celeb-points, 34px);
   color: var(--celeb-color, #D6483C);
 }
 .celeb-banner.kind-extrapoint .celeb-label,
 .celeb-banner.kind-fieldgoal .celeb-label{
-  font-size: 11px;
+  font-size: var(--font-celeb-label, 12px);
   letter-spacing: 0.08em;
 }
 
@@ -122,7 +122,7 @@ html, body{
 .celeb-label{
   font-family: 'Inter', sans-serif;
   font-weight: 800;
-  font-size: 12px;
+  font-size: var(--font-celeb-label, 12px);
   letter-spacing: 0.1em;
   color: var(--ink);
   white-space: nowrap;
@@ -130,7 +130,7 @@ html, body{
 .celeb-points{
   font-family: 'Teko', sans-serif;
   font-weight: 600;
-  font-size: 26px;
+  font-size: var(--font-celeb-points, 26px);
   line-height: 1;
   color: var(--celeb-color, #D6483C);
   white-space: nowrap;
@@ -273,7 +273,6 @@ html, body{
   max-height: calc(32px * var(--logo-scale, 1));
 }
 .bug.orient-stack .period{ margin-bottom: 0; }
-.bug.orient-stack .clock{ font-size: 28px; }
 .bug.orient-stack .bug-sub{
   flex-wrap: wrap;
   height: auto;
@@ -340,7 +339,7 @@ html, body{
 .popup-title{
   font-family: 'Inter', sans-serif;
   font-weight: 700;
-  font-size: 11px;
+  font-size: var(--font-popup-title, 11px);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--amber);
@@ -349,7 +348,7 @@ html, body{
 .popup-subject{
   font-family: 'Inter', sans-serif;
   font-weight: 800;
-  font-size: 18px;
+  font-size: var(--font-popup-subject, 18px);
   color: var(--ink);
   line-height: 1.15;
   margin-bottom: 10px;
@@ -374,12 +373,13 @@ html, body{
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  font-size: 11px;
+  font-size: var(--font-popup-label, 11px);
 }
 .popup-stat-value{
   color: var(--ink);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  font-size: var(--font-popup-value, 13px);
 }
 
 .bug-main{
@@ -487,7 +487,7 @@ html, body{
 .team-rank{
   font-family: 'Inter', sans-serif;
   font-weight: 700;
-  font-size: 12px;
+  font-size: var(--font-rank, 12px);
   letter-spacing: 0.02em;
   color: var(--ink-dim);
   flex-shrink: 0;
@@ -498,7 +498,7 @@ html, body{
 .team-name{
   font-family: 'Inter', sans-serif;
   font-weight: 800;
-  font-size: 16px;
+  font-size: var(--font-team-name, 16px);
   letter-spacing: 0.03em;
   color: var(--ink);
   white-space: nowrap;
@@ -508,7 +508,7 @@ html, body{
 .team-record{
   font-family: 'Inter', sans-serif;
   font-weight: 600;
-  font-size: 11px;
+  font-size: var(--font-record, 11px);
   letter-spacing: 0.04em;
   color: var(--ink-dim);
   margin-top: 4px;
@@ -520,7 +520,7 @@ html, body{
 .team-score{
   font-family: 'Teko', sans-serif;
   font-weight: 600;
-  font-size: 46px;
+  font-size: var(--font-score, 46px);
   line-height: 1;
   color: var(--ink);
   min-width: 44px;
@@ -530,7 +530,7 @@ html, body{
 
 .poss-arrow{
   color: var(--amber);
-  font-size: 14px;
+  font-size: var(--font-possession, 14px);
   opacity: 0;
   transition: opacity 0.15s ease;
   flex-shrink: 0;
@@ -584,14 +584,14 @@ html, body{
 .period{
   font-family: 'Inter', sans-serif;
   font-weight: 700;
-  font-size: var(--period-size, 11px);
-  line-height: 1;
+  font-size: var(--font-period, var(--period-font-size, 11px));
   letter-spacing: 0.12em;
+  line-height: 1.1;
   color: var(--ink-dim);
   margin-bottom: 0;
+  text-align: center;
 }
 .period.pregame-label{
-  font-size: calc(var(--period-size, 11px) * 0.82);
   letter-spacing: 0.08em;
   text-align: center;
   white-space: normal;
@@ -603,7 +603,7 @@ html, body{
 .clock{
   font-family: 'Teko', sans-serif;
   font-weight: 600;
-  font-size: 32px;
+  font-size: var(--font-clock, 32px);
   line-height: 1;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
@@ -642,8 +642,14 @@ html, body{
   white-space: nowrap;
 }
 .sub-item.show{ display: flex; }
+#subDownDistance{ font-size: var(--font-down-distance, 13px); }
+#subFouls{ font-size: var(--font-fouls, 13px); }
+#subShotClock{ font-size: var(--font-shot-clock, 13px); }
+#subBonus{ font-size: var(--font-bonus, 13px); }
+#subSets{ font-size: var(--font-sets, 13px); }
+#subTimeouts{ font-size: var(--font-timeouts, 11px); }
 
-.to-label{ color: var(--ink-dim); font-size: 11px; margin-right: 2px; }
+.to-label{ color: var(--ink-dim); font-size: var(--font-timeouts, 11px); margin-right: 2px; }
 .dots{ display: inline-flex; gap: 4px; }
 .dots span{
   width: 7px; height: 7px; border-radius: 50%;
@@ -654,9 +660,9 @@ html, body{
 .to-sep{ color: var(--ink-dim); margin: 0 2px; }
 
 .count-balls, .count-strikes, .count-outs{ display: inline-flex; gap: 3px; align-items: center; }
-.count-balls::before{ content: 'B'; color: var(--ink-dim); font-size: 10px; margin-right: 2px; }
-.count-strikes::before{ content: 'S'; color: var(--ink-dim); font-size: 10px; margin-right: 2px; }
-.count-outs::before{ content: 'O'; color: var(--ink-dim); font-size: 10px; margin-right: 2px; }
+.count-balls::before{ content: 'B'; color: var(--ink-dim); font-size: var(--font-count, 10px); margin-right: 2px; }
+.count-strikes::before{ content: 'S'; color: var(--ink-dim); font-size: var(--font-count, 10px); margin-right: 2px; }
+.count-outs::before{ content: 'O'; color: var(--ink-dim); font-size: var(--font-count, 10px); margin-right: 2px; }
 .pip{ width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.18); display:inline-block; }
 .pip.lit{ background: var(--amber); }
 

@@ -52,7 +52,8 @@ Go to `http://localhost:4173/control.html` in your browser. This is where you:
    receiving updates even when you're not on that scene.
 
 Any change you make in the control panel appears in OBS within a fraction of
-a second — no refreshing needed.
+a second — no refreshing needed. The clock runs on each screen from the moment
+you hit Start, so it stays smooth without a network update every second.
 
 ## Running it from a second computer (e.g. control panel on a laptop in the
 booth, OBS on a machine in the truck)
@@ -65,9 +66,12 @@ the OBS Browser Source URL in that case too.
 
 ## Notes
 
-- Game state (scores, logos, everything) is saved to `state.json` in this
-  folder as you go, so if you accidentally close the control panel tab or
-  restart the server, nothing is lost — just reopen the control panel.
+- The control panel keeps the game on this computer first, then syncs it to
+  the overlay. Scores, names, and logos are written to `state.json` in this
+  folder, and the browser also keeps a local copy. Closing the tab or
+  restarting the server does not wipe the game. If a save file is ever
+  damaged, the app restores the previous good copy instead of starting over.
+- Hit Save to force a write immediately. Other changes save on their own.
 - "Reset game" clears scores, clock, and in-game stats but keeps your team
   names, colors, and logos so you don't have to re-enter them between games.
 - Team logos are stored as part of the game state — keep them reasonably
