@@ -90,8 +90,8 @@ html, body{
 }
 
 .celeb-logo{
-  width: 28px;
-  height: 28px;
+  width: calc(28px * var(--logo-scale, 1));
+  height: calc(28px * var(--logo-scale, 1));
   object-fit: contain;
   flex-shrink: 0;
   display: none;
@@ -269,8 +269,8 @@ html, body{
   margin-bottom: 0;
 }
 .bug.orient-stack .event-logo{
-  max-width: 32px;
-  max-height: 32px;
+  max-width: calc(32px * var(--logo-scale, 1));
+  max-height: calc(32px * var(--logo-scale, 1));
 }
 .bug.orient-stack .period{ margin-bottom: 0; }
 .bug.orient-stack .clock{ font-size: 28px; }
@@ -395,15 +395,17 @@ html, body{
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 28px;
+  height: auto;
+  min-height: 28px;
   margin-bottom: 2px;
 }
 .event-logo-wrap.hidden-logo{ display: none; }
 
 .event-logo{
-  max-width: 36px;
-  max-height: 28px;
+  max-width: calc(36px * var(--logo-scale, 1));
+  max-height: calc(28px * var(--logo-scale, 1));
   object-fit: contain;
+  transform: translate(var(--logo-x, 0px), var(--logo-y, 0px));
 }
 
 .team-block{
@@ -452,10 +454,11 @@ html, body{
 }
 
 .team-logo{
-  width: 40px;
-  height: 40px;
+  width: calc(40px * var(--logo-scale, 1));
+  height: calc(40px * var(--logo-scale, 1));
   object-fit: contain;
   flex-shrink: 0;
+  transform: translate(var(--logo-x, 0px), var(--logo-y, 0px));
 }
 
 .team-copy{

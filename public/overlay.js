@@ -46,6 +46,28 @@
     }
   }
 
+  function clampLogoScale(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 100;
+    return Math.min(200, Math.max(50, Math.round(n)));
+  }
+
+  function clampLogoNudge(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 0;
+    return Math.min(24, Math.max(-24, Math.round(n)));
+  }
+
+  function applyLogoFit(el, source, withNudge) {
+    if (!el) return;
+    const scale = clampLogoScale(source && source.logoScale) / 100;
+    el.style.setProperty('--logo-scale', String(scale));
+    if (withNudge) {
+      el.style.setProperty('--logo-x', clampLogoNudge(source && source.logoX) + 'px');
+      el.style.setProperty('--logo-y', clampLogoNudge(source && source.logoY) + 'px');
+    }
+  }
+
   function hexToRgb(hex) {
     const h = (hex || '').replace('#', '');
     if (h.length !== 6) return { r: 15, g: 18, b: 24 };
@@ -189,6 +211,7 @@
     const fallback = banner.querySelector('.celeb-fallback');
     if (team.logo) {
       logo.src = team.logo;
+      applyLogoFit(logo, team, false);
       logo.classList.add('show');
       fallback.classList.remove('show');
     } else {
@@ -270,17 +293,23 @@
     applyAppearance(s.appearance);
 
     // logos
+    const homeLogo = document.getElementById('homeLogo');
+    const awayLogo = document.getElementById('awayLogo');
+    applyLogoFit(homeLogo, s.teams.home, true);
+    applyLogoFit(awayLogo, s.teams.away, true);
     if (t.showTeamLogos) {
-      setLogo(document.getElementById('homeLogo'), s.teams.home.logo);
-      setLogo(document.getElementById('awayLogo'), s.teams.away.logo);
+      setLogo(homeLogo, s.teams.home.logo);
+      setLogo(awayLogo, s.teams.away.logo);
     } else {
-      document.getElementById('homeLogo').style.visibility = 'hidden';
-      document.getElementById('awayLogo').style.visibility = 'hidden';
+      homeLogo.style.visibility = 'hidden';
+      awayLogo.style.visibility = 'hidden';
     }
     const clockCutout = !!t.transparentClock;
     const eventWrap = document.getElementById('eventLogoWrap');
+    const eventLogo = document.getElementById('eventLogo');
+    applyLogoFit(eventLogo, s.event, true);
     eventWrap.classList.toggle('hidden-logo', !t.showEventLogo);
-    if (t.showEventLogo) setLogo(document.getElementById('eventLogo'), s.event.logo);
+    if (t.showEventLogo) setLogo(eventLogo, s.event.logo);
 
     // names, ranks, records + score
     paintTeamSide('home', s.teams.home, t);

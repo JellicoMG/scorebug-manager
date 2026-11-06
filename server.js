@@ -20,6 +20,9 @@ function defaultTeam(overrides) {
     recordOverall: '',
     recordRegion: '',
     rank: null,
+    logoScale: 100,
+    logoX: 0,
+    logoY: 0,
     ...overrides
   };
 }
@@ -28,7 +31,7 @@ function defaultState() {
   return {
     meta: { sport: 'football', visible: true, preset: 'live' },
     pregameBackup: null,
-    event: { logo: null, name: 'FRIDAY NIGHT' },
+    event: { logo: null, name: 'FRIDAY NIGHT', logoScale: 100, logoX: 0, logoY: 0 },
     teams: {
       home: defaultTeam({ name: 'HOME', color: '#2E6DE0' }),
       away: defaultTeam({ name: 'AWAY', color: '#D6483C' })

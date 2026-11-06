@@ -43,11 +43,30 @@
     <div class="card">
       <h2>Event logo</h2>
       <div class="logo-row">
-        <img id="eventLogoPreview" class="logo-preview" alt="">
+        <div class="logo-preview-frame">
+          <img id="eventLogoPreview" class="logo-preview" alt="">
+        </div>
         <div class="logo-actions">
           <label class="btn btn-small">Upload<input type="file" id="eventLogoInput" accept="image/*" hidden></label>
           <button class="btn btn-small btn-ghost" id="eventLogoClear">Clear</button>
         </div>
+      </div>
+      <div class="logo-adjust">
+        <label class="field">Size
+          <input type="range" id="eventLogoScale" min="50" max="200" step="5" value="100">
+          <span class="range-val" id="eventLogoScaleVal">100%</span>
+        </label>
+        <div class="logo-nudge-row">
+          <label class="field">Left / right
+            <input type="range" id="eventLogoX" min="-24" max="24" step="1" value="0">
+            <span class="range-val" id="eventLogoXVal">centered</span>
+          </label>
+          <label class="field">Up / down
+            <input type="range" id="eventLogoY" min="-24" max="24" step="1" value="0">
+            <span class="range-val" id="eventLogoYVal">centered</span>
+          </label>
+        </div>
+        <button type="button" class="btn btn-small btn-ghost" id="eventLogoReset">Reset fit</button>
       </div>
     </div>
 
@@ -64,11 +83,30 @@
         <label class="field rank-field">Rank<input type="number" id="awayRank" min="1" max="99" placeholder="#" disabled></label>
       </div>
       <div class="logo-row">
-        <img id="awayLogoPreview" class="logo-preview" alt="">
+        <div class="logo-preview-frame">
+          <img id="awayLogoPreview" class="logo-preview" alt="">
+        </div>
         <div class="logo-actions">
           <label class="btn btn-small">Upload<input type="file" id="awayLogoInput" accept="image/*" hidden></label>
           <button class="btn btn-small btn-ghost" id="awayLogoClear">Clear</button>
         </div>
+      </div>
+      <div class="logo-adjust">
+        <label class="field">Size
+          <input type="range" id="awayLogoScale" min="50" max="200" step="5" value="100">
+          <span class="range-val" id="awayLogoScaleVal">100%</span>
+        </label>
+        <div class="logo-nudge-row">
+          <label class="field">Left / right
+            <input type="range" id="awayLogoX" min="-24" max="24" step="1" value="0">
+            <span class="range-val" id="awayLogoXVal">centered</span>
+          </label>
+          <label class="field">Up / down
+            <input type="range" id="awayLogoY" min="-24" max="24" step="1" value="0">
+            <span class="range-val" id="awayLogoYVal">centered</span>
+          </label>
+        </div>
+        <button type="button" class="btn btn-small btn-ghost" id="awayLogoReset">Reset fit</button>
       </div>
     </div>
 
@@ -85,11 +123,30 @@
         <label class="field rank-field">Rank<input type="number" id="homeRank" min="1" max="99" placeholder="#" disabled></label>
       </div>
       <div class="logo-row">
-        <img id="homeLogoPreview" class="logo-preview" alt="">
+        <div class="logo-preview-frame">
+          <img id="homeLogoPreview" class="logo-preview" alt="">
+        </div>
         <div class="logo-actions">
           <label class="btn btn-small">Upload<input type="file" id="homeLogoInput" accept="image/*" hidden></label>
           <button class="btn btn-small btn-ghost" id="homeLogoClear">Clear</button>
         </div>
+      </div>
+      <div class="logo-adjust">
+        <label class="field">Size
+          <input type="range" id="homeLogoScale" min="50" max="200" step="5" value="100">
+          <span class="range-val" id="homeLogoScaleVal">100%</span>
+        </label>
+        <div class="logo-nudge-row">
+          <label class="field">Left / right
+            <input type="range" id="homeLogoX" min="-24" max="24" step="1" value="0">
+            <span class="range-val" id="homeLogoXVal">centered</span>
+          </label>
+          <label class="field">Up / down
+            <input type="range" id="homeLogoY" min="-24" max="24" step="1" value="0">
+            <span class="range-val" id="homeLogoYVal">centered</span>
+          </label>
+        </div>
+        <button type="button" class="btn btn-small btn-ghost" id="homeLogoReset">Reset fit</button>
       </div>
     </div>
 

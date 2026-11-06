@@ -156,6 +156,7 @@
     $('homeColor').value = state.teams.home.color;
 
     renderTeamMeta();
+    renderLogoFit();
     renderAppearance();
     renderPopup();
     renderToggles();
@@ -179,6 +180,57 @@
     const img = $(id);
     if (dataUrl) { img.src = dataUrl; img.style.opacity = 1; }
     else { img.removeAttribute('src'); img.style.opacity = 0.3; }
+  }
+
+  const LOGO_TARGETS = [
+    { key: 'event', get: () => state.event, preview: 'eventLogoPreview' },
+    { key: 'away', get: () => state.teams.away, preview: 'awayLogoPreview' },
+    { key: 'home', get: () => state.teams.home, preview: 'homeLogoPreview' }
+  ];
+
+  function clampLogoScale(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 100;
+    return Math.min(200, Math.max(50, Math.round(n)));
+  }
+
+  function clampLogoNudge(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 0;
+    return Math.min(24, Math.max(-24, Math.round(n)));
+  }
+
+  function formatNudge(n, negativeLabel, positiveLabel) {
+    if (!n) return 'centered';
+    if (n < 0) return Math.abs(n) + ' px ' + negativeLabel;
+    return n + ' px ' + positiveLabel;
+  }
+
+  function ensureLogoFit(obj) {
+    if (!obj) return;
+    obj.logoScale = clampLogoScale(obj.logoScale);
+    obj.logoX = clampLogoNudge(obj.logoX);
+    obj.logoY = clampLogoNudge(obj.logoY);
+  }
+
+  function renderLogoFit() {
+    LOGO_TARGETS.forEach(({ key, get, preview }) => {
+      const src = get();
+      ensureLogoFit(src);
+      const scaleEl = $(key + 'LogoScale');
+      const xEl = $(key + 'LogoX');
+      const yEl = $(key + 'LogoY');
+      if (document.activeElement !== scaleEl) scaleEl.value = String(src.logoScale);
+      if (document.activeElement !== xEl) xEl.value = String(src.logoX);
+      if (document.activeElement !== yEl) yEl.value = String(src.logoY);
+      $(key + 'LogoScaleVal').textContent = src.logoScale + '%';
+      $(key + 'LogoXVal').textContent = formatNudge(src.logoX, 'left', 'right');
+      $(key + 'LogoYVal').textContent = formatNudge(src.logoY, 'up', 'down');
+      const img = $(preview);
+      img.style.setProperty('--logo-scale', String(src.logoScale / 100));
+      img.style.setProperty('--logo-x', (src.logoX * 0.6) + 'px');
+      img.style.setProperty('--logo-y', (src.logoY * 0.6) + 'px');
+    });
   }
 
   function ensurePopupShape() {
@@ -585,6 +637,35 @@
     $('awayLogoClear').onclick = () => { state.teams.away.logo = null; renderAll(); send(); };
     $('homeLogoInput').onchange = async (e) => { if (e.target.files[0]) { state.teams.home.logo = await fileToDataUrl(e.target.files[0]); renderAll(); send(); } };
     $('homeLogoClear').onclick = () => { state.teams.home.logo = null; renderAll(); send(); };
+
+    LOGO_TARGETS.forEach(({ key, get }) => {
+      $(key + 'LogoScale').oninput = () => {
+        const src = get();
+        src.logoScale = clampLogoScale($(key + 'LogoScale').value);
+        renderLogoFit();
+        send();
+      };
+      $(key + 'LogoX').oninput = () => {
+        const src = get();
+        src.logoX = clampLogoNudge($(key + 'LogoX').value);
+        renderLogoFit();
+        send();
+      };
+      $(key + 'LogoY').oninput = () => {
+        const src = get();
+        src.logoY = clampLogoNudge($(key + 'LogoY').value);
+        renderLogoFit();
+        send();
+      };
+      $(key + 'LogoReset').onclick = () => {
+        const src = get();
+        src.logoScale = 100;
+        src.logoX = 0;
+        src.logoY = 0;
+        renderLogoFit();
+        send();
+      };
+    });
 
     // team names / colors / records / ranks
     $('awayName').oninput = () => { state.teams.away.name = $('awayName').value || 'AWAY'; renderScore(); send(); };

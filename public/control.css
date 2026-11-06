@@ -221,14 +221,34 @@ h2, .card-head{
 }
 
 .logo-row{ display: flex; align-items: center; gap: 12px; margin-top: 6px; }
-.logo-preview{
-  width: 48px; height: 48px;
-  object-fit: contain;
+.logo-preview-frame{
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
   background: var(--panel-2);
   border: 1px solid var(--line);
   border-radius: 6px;
 }
-.logo-actions{ display: flex; gap: 8px; }
+.logo-preview{
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  transform: translate(var(--logo-x, 0px), var(--logo-y, 0px)) scale(var(--logo-scale, 1));
+}
+.logo-actions{ display: flex; gap: 8px; flex-wrap: wrap; }
+.logo-adjust{ margin-top: 10px; }
+.logo-adjust > .field{ margin-bottom: 8px; }
+.logo-nudge-row{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.logo-nudge-row .field{ margin-bottom: 8px; }
+.logo-adjust > .btn{ margin-top: 2px; }
 
 .toggle-grid{ display: flex; flex-direction: column; gap: 8px; }
 .toggle-row{
