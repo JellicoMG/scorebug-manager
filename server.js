@@ -99,6 +99,7 @@ function normalizeState(raw) {
     value: row && row.value != null ? String(row.value) : ''
   }));
   const savedFonts = raw && raw.appearance && raw.appearance.fonts;
+  if (!merged.appearance.fonts) merged.appearance.fonts = {};
   Sync.FONT_CONTROLS.forEach((item) => {
     let value = savedFonts && savedFonts[item.key];
     if (value == null && item.key === 'period' && raw && raw.appearance) value = raw.appearance.periodFontSize;
@@ -204,7 +205,13 @@ function applyIncoming(incoming) {
 
 const app = express();
 app.use(express.json({ limit: '15mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: true,
+  maxAge: 0,
+  setHeaders(res) {
+    res.setHeader('Cache-Control', 'no-store');
+  }
+}));
 
 app.get('/', (req, res) => {
   res.redirect('/control.html');

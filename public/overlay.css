@@ -90,8 +90,8 @@ html, body{
 }
 
 .celeb-logo{
-  width: calc(28px * var(--logo-scale, 1));
-  height: calc(28px * var(--logo-scale, 1));
+  width: 28px;
+  height: 28px;
   object-fit: contain;
   flex-shrink: 0;
   display: none;
@@ -269,8 +269,10 @@ html, body{
   margin-bottom: 0;
 }
 .bug.orient-stack .event-logo{
-  max-width: calc(32px * var(--logo-scale, 1));
-  max-height: calc(32px * var(--logo-scale, 1));
+  width: 32px;
+  height: 32px;
+  max-width: none;
+  max-height: none;
 }
 .bug.orient-stack .period{ margin-bottom: 0; }
 .bug.orient-stack .bug-sub{
@@ -402,10 +404,11 @@ html, body{
 .event-logo-wrap.hidden-logo{ display: none; }
 
 .event-logo{
-  max-width: calc(36px * var(--logo-scale, 1));
-  max-height: calc(28px * var(--logo-scale, 1));
+  width: 36px;
+  height: 28px;
+  max-width: none;
+  max-height: none;
   object-fit: contain;
-  transform: translate(var(--logo-x, 0px), var(--logo-y, 0px));
 }
 
 .team-block{
@@ -454,11 +457,12 @@ html, body{
 }
 
 .team-logo{
-  width: calc(40px * var(--logo-scale, 1));
-  height: calc(40px * var(--logo-scale, 1));
+  width: 40px;
+  height: 40px;
+  max-width: none;
+  max-height: none;
   object-fit: contain;
   flex-shrink: 0;
-  transform: translate(var(--logo-x, 0px), var(--logo-y, 0px));
 }
 
 .team-copy{

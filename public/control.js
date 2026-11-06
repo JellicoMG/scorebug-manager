@@ -385,16 +385,19 @@
       const scaleEl = $(key + 'LogoScale');
       const xEl = $(key + 'LogoX');
       const yEl = $(key + 'LogoY');
+      if (!scaleEl || !xEl || !yEl) return;
       if (document.activeElement !== scaleEl) scaleEl.value = String(src.logoScale);
       if (document.activeElement !== xEl) xEl.value = String(src.logoX);
       if (document.activeElement !== yEl) yEl.value = String(src.logoY);
-      $(key + 'LogoScaleVal').textContent = src.logoScale + '%';
+      const base = key === 'event' ? 36 : 48;
+      const px = Math.round(base * src.logoScale / 100);
+      $(key + 'LogoScaleVal').textContent = src.logoScale + '% · ' + px + 'px';
       $(key + 'LogoXVal').textContent = formatNudge(src.logoX, 'left', 'right');
       $(key + 'LogoYVal').textContent = formatNudge(src.logoY, 'up', 'down');
       const img = $(preview);
-      img.style.setProperty('--logo-scale', String(src.logoScale / 100));
-      img.style.setProperty('--logo-x', (src.logoX * 0.6) + 'px');
-      img.style.setProperty('--logo-y', (src.logoY * 0.6) + 'px');
+      img.style.width = px + 'px';
+      img.style.height = px + 'px';
+      img.style.transform = 'translate(' + src.logoX + 'px, ' + src.logoY + 'px)';
     });
   }
 

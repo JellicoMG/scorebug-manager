@@ -70,14 +70,18 @@
     return Math.min(24, Math.max(-24, Math.round(n)));
   }
 
-  function applyLogoFit(el, source, withNudge) {
+  function applyLogoFit(el, source, baseW, baseH, withNudge) {
     if (!el) return;
     const scale = clampLogoScale(source && source.logoScale) / 100;
-    el.style.setProperty('--logo-scale', String(scale));
-    if (withNudge) {
-      el.style.setProperty('--logo-x', clampLogoNudge(source && source.logoX) + 'px');
-      el.style.setProperty('--logo-y', clampLogoNudge(source && source.logoY) + 'px');
-    }
+    const w = Math.round(baseW * scale);
+    const h = Math.round(baseH * scale);
+    el.style.width = w + 'px';
+    el.style.height = h + 'px';
+    el.style.maxWidth = w + 'px';
+    el.style.maxHeight = h + 'px';
+    const x = withNudge ? clampLogoNudge(source && source.logoX) : 0;
+    const y = withNudge ? clampLogoNudge(source && source.logoY) : 0;
+    el.style.transform = 'translate(' + x + 'px, ' + y + 'px)';
   }
 
   function hexToRgb(hex) {
@@ -234,7 +238,7 @@
     const fallback = banner.querySelector('.celeb-fallback');
     if (team.logo) {
       logo.src = team.logo;
-      applyLogoFit(logo, team, false);
+      applyLogoFit(logo, team, 28, 28, false);
       logo.classList.add('show');
       fallback.classList.remove('show');
     } else {
@@ -327,8 +331,8 @@
     // logos
     const homeLogo = document.getElementById('homeLogo');
     const awayLogo = document.getElementById('awayLogo');
-    applyLogoFit(homeLogo, s.teams.home, true);
-    applyLogoFit(awayLogo, s.teams.away, true);
+    applyLogoFit(homeLogo, s.teams.home, 40, 40, true);
+    applyLogoFit(awayLogo, s.teams.away, 40, 40, true);
     if (t.showTeamLogos) {
       setLogo(homeLogo, s.teams.home.logo);
       setLogo(awayLogo, s.teams.away.logo);
@@ -339,7 +343,9 @@
     const clockCutout = !!t.transparentClock;
     const eventWrap = document.getElementById('eventLogoWrap');
     const eventLogo = document.getElementById('eventLogo');
-    applyLogoFit(eventLogo, s.event, true);
+    const eventBase = bug.classList.contains('orient-stack') ? 32 : 36;
+    const eventBaseH = bug.classList.contains('orient-stack') ? 32 : 28;
+    applyLogoFit(eventLogo, s.event, eventBase, eventBaseH, true);
     eventWrap.classList.toggle('hidden-logo', !t.showEventLogo);
     if (t.showEventLogo) setLogo(eventLogo, s.event.logo);
 
