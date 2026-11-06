@@ -385,7 +385,8 @@ html, body{
 .bug-main{
   display: flex;
   align-items: stretch;
-  height: 92px;
+  height: auto;
+  min-height: 92px;
   background: transparent;
   /* Outer shape kept via child panels so the center can punch transparent for a clock camera */
 }

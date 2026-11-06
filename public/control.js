@@ -354,6 +354,12 @@
     while (state.popup.stats.length < 4) state.popup.stats.push({ label: '', value: '' });
   }
 
+  function clampPeriodFontSize(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 11;
+    return Math.min(28, Math.max(8, Math.round(n)));
+  }
+
   function ensureAppearance() {
     if (!state.appearance) state.appearance = { panelColor: '#0F1218', panelOpacity: 0.94, orientation: 'bottom', periodFontSize: 11, fonts: Sync.defaultFonts() };
     if (state.appearance.panelColor == null) state.appearance.panelColor = '#0F1218';
@@ -428,6 +434,7 @@
     const colorEl = $('panelColor');
     const opacityEl = $('panelOpacity');
     const orientEl = $('orientationSelect');
+    const sizeEl = $('periodFontSize');
     if (document.activeElement !== colorEl) colorEl.value = state.appearance.panelColor || '#0F1218';
     if (document.activeElement !== opacityEl) opacityEl.value = String(state.appearance.panelOpacity);
     if (document.activeElement !== orientEl) orientEl.value = state.appearance.orientation || 'bottom';
@@ -440,6 +447,7 @@
       if (val) val.textContent = size + 'px';
     });
     $('panelOpacityVal').textContent = Math.round(state.appearance.panelOpacity * 100) + '%';
+    $('periodFontSizeVal').textContent = state.appearance.periodFontSize + 'px';
   }
 
   function renderPopup() {
@@ -897,6 +905,12 @@
       ensureAppearance();
       state.appearance.panelOpacity = parseFloat($('panelOpacity').value);
       $('panelOpacityVal').textContent = Math.round(state.appearance.panelOpacity * 100) + '%';
+      send();
+    };
+    $('periodFontSize').oninput = () => {
+      ensureAppearance();
+      state.appearance.periodFontSize = clampPeriodFontSize($('periodFontSize').value);
+      $('periodFontSizeVal').textContent = state.appearance.periodFontSize + 'px';
       send();
     };
 

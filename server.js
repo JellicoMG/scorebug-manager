@@ -47,9 +47,7 @@ function defaultState() {
     appearance: {
       panelColor: '#0F1218',
       panelOpacity: 0.94,
-      orientation: 'bottom',
-      periodFontSize: 11,
-      fonts: Sync.defaultFonts()
+      orientation: 'bottom'
     },
     popup: {
       visible: false,
