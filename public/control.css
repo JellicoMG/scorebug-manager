@@ -206,6 +206,9 @@ h2, .card-head{
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
+.font-size-heading{ margin: 12px 0 8px; }
+.font-size-list .field{ margin-bottom: 10px; }
+.font-size-list .field input[type="range"]{ margin-top: 2px; }
 .stat-rows{ display: flex; flex-direction: column; gap: 8px; }
 .stat-row{ display: flex; gap: 8px; }
 .stat-input{

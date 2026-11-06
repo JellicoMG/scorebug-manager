@@ -1,8 +1,19 @@
 (function () {
+  const Sync = window.ScorebugSync;
+  const LOCAL_STATE_KEY = 'scorebug-state-v2';
+  const LOGO_EVENT_KEY = 'scorebug-logo-event';
+  const LOGO_HOME_KEY = 'scorebug-logo-home';
+  const LOGO_AWAY_KEY = 'scorebug-logo-away';
+  const LOGO_FLAG_KEY = 'scorebug-logos-stored';
+
   let state = null;
   let ws = null;
   let tickTimer = null;
   let suppressSend = false;
+  let synced = false;
+  let logosPending = false;
+  let netTimer = null;
+  let localTimer = null;
 
   const DEFAULT_CLOCK = {
     football: 720, basketball: 480, soccer: 0, baseball: 0, volleyball: 0, generic: 600
@@ -93,27 +104,163 @@
     });
   }
 
+  function compressLogo(dataUrl) {
+    if (!dataUrl) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxSize = 360;
+        const tooBig = Math.max(img.width, img.height) > maxSize || dataUrl.length > 180000;
+        if (!tooBig) { resolve(dataUrl); return; }
+        const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const jpeg = dataUrl.indexOf('data:image/jpeg') === 0 || dataUrl.indexOf('data:image/jpg') === 0;
+        resolve(canvas.toDataURL(jpeg ? 'image/jpeg' : 'image/png', 0.85));
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    });
+  }
+
+  let shrinkStarted = false;
+  function maybeShrinkLogos() {
+    if (shrinkStarted || !state) return;
+    const logos = [state.event && state.event.logo, state.teams.home.logo, state.teams.away.logo];
+    if (!logos.some((logo) => logo && logo.length > 180000)) return;
+    shrinkStarted = true;
+    Promise.all(logos.map((logo) => compressLogo(logo))).then(([eventLogo, homeLogo, awayLogo]) => {
+      if (!state) return;
+      let changed = false;
+      if (eventLogo !== state.event.logo) { state.event.logo = eventLogo; changed = true; }
+      if (homeLogo !== state.teams.home.logo) { state.teams.home.logo = homeLogo; changed = true; }
+      if (awayLogo !== state.teams.away.logo) { state.teams.away.logo = awayLogo; changed = true; }
+      if (!changed) return;
+      logosPending = true;
+      rememberLogos();
+      setPreview('eventLogoPreview', state.event.logo);
+      setPreview('awayLogoPreview', state.teams.away.logo);
+      setPreview('homeLogoPreview', state.teams.home.logo);
+      send();
+    });
+  }
+
+  async function readLogo(file) {
+    const raw = await fileToDataUrl(file);
+    return compressLogo(raw);
+  }
+
+  function loadLocal() {
+    try {
+      const raw = localStorage.getItem(LOCAL_STATE_KEY);
+      if (!raw) return null;
+      const saved = JSON.parse(raw);
+      if (!saved || !saved.meta || !saved.teams || !saved.teams.home || !saved.teams.away || !saved.clock || !saved.sportData) {
+        return null;
+      }
+      if (!saved.event) saved.event = { name: '', logo: null };
+      const eventLogo = localStorage.getItem(LOGO_EVENT_KEY);
+      const homeLogo = localStorage.getItem(LOGO_HOME_KEY);
+      const awayLogo = localStorage.getItem(LOGO_AWAY_KEY);
+      saved.event.logo = eventLogo || null;
+      saved.teams.home.logo = homeLogo || null;
+      saved.teams.away.logo = awayLogo || null;
+      return saved;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function rememberLogos() {
+    try {
+      localStorage.setItem(LOGO_EVENT_KEY, (state.event && state.event.logo) || '');
+      localStorage.setItem(LOGO_HOME_KEY, (state.teams.home && state.teams.home.logo) || '');
+      localStorage.setItem(LOGO_AWAY_KEY, (state.teams.away && state.teams.away.logo) || '');
+      localStorage.setItem(LOGO_FLAG_KEY, '1');
+    } catch (e) { /* quota or private mode */ }
+  }
+
+  function flushLocal() {
+    if (!state) return;
+    try {
+      localStorage.setItem(LOCAL_STATE_KEY, JSON.stringify(state, (key, value) => (key === 'logo' ? undefined : value)));
+      const haveLogos = !!(state.event && state.event.logo)
+        || !!(state.teams.home && state.teams.home.logo)
+        || !!(state.teams.away && state.teams.away.logo);
+      if (logosPending || (haveLogos && localStorage.getItem(LOGO_FLAG_KEY) !== '1')) rememberLogos();
+    } catch (e) { /* keep going; the server copy still updates */ }
+  }
+
+  function scheduleLocal() {
+    clearTimeout(localTimer);
+    localTimer = setTimeout(flushLocal, 60);
+  }
+
+  function wirePayload(includeLogos) {
+    return JSON.stringify({ type: 'state', state }, (key, value) => {
+      if (!includeLogos && key === 'logo') return undefined;
+      return value;
+    });
+  }
+
+  function flushNet() {
+    if (suppressSend || !state || !synced || !ws || ws.readyState !== WebSocket.OPEN) return;
+    const includeLogos = logosPending;
+    ws.send(wirePayload(includeLogos));
+    if (includeLogos) logosPending = false;
+  }
+
   function send() {
-    if (suppressSend || !ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: 'state', state }));
+    if (suppressSend || !state) return;
+    if (!state.meta) state.meta = {};
+    state.meta.rev = (state.meta.rev || 0) + 1;
+    state.meta.updatedAt = Date.now();
+    scheduleLocal();
+    clearTimeout(netTimer);
+    netTimer = setTimeout(flushNet, 40);
+  }
+
+  function adopt(incoming, merge) {
+    if (merge && state) state = Sync.deepMerge(state, incoming);
+    else state = incoming;
+    if (state.clock && state.clock.running && !state.clock.anchor) {
+      state.clock.anchor = Date.now();
+      state.meta.rev = (state.meta.rev || 0) + 1;
+      state.meta.updatedAt = Date.now();
+      scheduleLocal();
+      clearTimeout(netTimer);
+      netTimer = setTimeout(flushNet, 40);
+    }
+    suppressSend = true;
+    renderAll();
+    suppressSend = false;
+    startTick();
+    flushLocal();
+    maybeShrinkLogos();
   }
 
   function connect() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    synced = false;
     ws = new WebSocket(`${proto}://${location.host}`);
-    ws.onopen = () => { $('connStatus').textContent = 'connected'; $('connStatus').className = 'conn-status live'; };
-    ws.onclose = () => { $('connStatus').textContent = 'reconnecting\u2026'; $('connStatus').className = 'conn-status down'; setTimeout(connect, 1500); };
+    ws.onopen = () => {
+      $('connStatus').textContent = 'connected';
+      $('connStatus').className = 'conn-status live';
+    };
+    ws.onclose = () => {
+      synced = false;
+      $('connStatus').textContent = 'reconnecting\u2026';
+      $('connStatus').className = 'conn-status down';
+      setTimeout(connect, 1500);
+    };
     ws.onerror = () => ws.close();
     ws.onmessage = (evt) => {
-      const msg = JSON.parse(evt.data);
-      if (msg.type === 'state') {
-        const firstLoad = state === null;
-        state = msg.state;
-        suppressSend = true;
-        renderAll();
-        suppressSend = false;
-        if (firstLoad) startTick();
-      } else if (msg.type === 'saved') {
+      let msg;
+      try { msg = JSON.parse(evt.data); } catch (e) { return; }
+      if (msg.type === 'saved') {
         const btn = $('saveBtn');
         if (!btn) return;
         btn.textContent = msg.ok ? 'Saved!' : 'Save failed';
@@ -123,7 +270,25 @@
           btn.textContent = 'Save';
           btn.classList.remove('on');
         }, 1400);
+        return;
       }
+      if (msg.type !== 'state' || !msg.state) return;
+      if (!synced) {
+        synced = true;
+        if (!state || Sync.isNewer(msg.state, state)) adopt(msg.state, false);
+        else if (Sync.isNewer(state, msg.state)) {
+          const serverLogos = msg.state.event && msg.state.event.logo
+            || msg.state.teams && msg.state.teams.home && msg.state.teams.home.logo
+            || msg.state.teams && msg.state.teams.away && msg.state.teams.away.logo;
+          const localLogos = state.event && state.event.logo
+            || state.teams.home && state.teams.home.logo
+            || state.teams.away && state.teams.away.logo;
+          if (!serverLogos && localLogos) logosPending = true;
+          flushNet();
+        }
+        return;
+      }
+      if (Sync.isNewer(msg.state, state)) adopt(msg.state, true);
     };
   }
 
@@ -190,12 +355,54 @@
   }
 
   function ensureAppearance() {
-    if (!state.appearance) state.appearance = { panelColor: '#0F1218', panelOpacity: 0.94, orientation: 'bottom' };
+    if (!state.appearance) state.appearance = { panelColor: '#0F1218', panelOpacity: 0.94, orientation: 'bottom', periodFontSize: 11, fonts: Sync.defaultFonts() };
     if (state.appearance.panelColor == null) state.appearance.panelColor = '#0F1218';
     if (typeof state.appearance.panelOpacity !== 'number') state.appearance.panelOpacity = 0.94;
     if (!['bottom', 'top', 'stack'].includes(state.appearance.orientation)) {
       state.appearance.orientation = 'bottom';
     }
+    if (!state.appearance.fonts) state.appearance.fonts = {};
+    Sync.FONT_CONTROLS.forEach((item) => {
+      let value = state.appearance.fonts[item.key];
+      if (value == null && item.key === 'period') value = state.appearance.periodFontSize;
+      state.appearance.fonts[item.key] = Sync.clampFont(item, value);
+    });
+    state.appearance.periodFontSize = state.appearance.fonts.period;
+  }
+
+  function initFontSliders() {
+    const wrap = $('fontSizes');
+    if (!wrap || wrap.dataset.ready === '1') return;
+    wrap.dataset.ready = '1';
+    Sync.FONT_CONTROLS.forEach((item) => {
+      const field = document.createElement('label');
+      field.className = 'field';
+      const name = document.createElement('span');
+      name.textContent = item.label;
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.id = 'fontSize_' + item.key;
+      slider.min = String(item.min);
+      slider.max = String(item.max);
+      slider.step = '1';
+      slider.value = String(item.def);
+      const val = document.createElement('span');
+      val.className = 'range-val';
+      val.id = 'fontSizeVal_' + item.key;
+      val.textContent = item.def + 'px';
+      field.appendChild(name);
+      field.appendChild(slider);
+      field.appendChild(val);
+      wrap.appendChild(field);
+      slider.oninput = () => {
+        ensureAppearance();
+        const size = Sync.clampFont(item, slider.value);
+        state.appearance.fonts[item.key] = size;
+        if (item.key === 'period') state.appearance.periodFontSize = size;
+        val.textContent = size + 'px';
+        send();
+      };
+    });
   }
 
   function renderTeamMeta() {
@@ -224,6 +431,14 @@
     if (document.activeElement !== colorEl) colorEl.value = state.appearance.panelColor || '#0F1218';
     if (document.activeElement !== opacityEl) opacityEl.value = String(state.appearance.panelOpacity);
     if (document.activeElement !== orientEl) orientEl.value = state.appearance.orientation || 'bottom';
+    Sync.FONT_CONTROLS.forEach((item) => {
+      const slider = $('fontSize_' + item.key);
+      const val = $('fontSizeVal_' + item.key);
+      if (!slider) return;
+      const size = state.appearance.fonts[item.key];
+      if (document.activeElement !== slider) slider.value = String(size);
+      if (val) val.textContent = size + 'px';
+    });
     $('panelOpacityVal').textContent = Math.round(state.appearance.panelOpacity * 100) + '%';
   }
 
@@ -312,7 +527,7 @@
 
   function renderClockPeriod() {
     if (!document.activeElement || document.activeElement.id !== 'clockInput') {
-      $('clockInput').value = fmtClock(state.clock.seconds);
+      $('clockInput').value = fmtClock(Sync.clockShown(state.clock));
     }
     $('clockStartStop').textContent = state.clock.running ? 'Pause' : 'Start';
     $('clockStartStop').classList.toggle('btn-toggle', true);
@@ -372,18 +587,28 @@
 
   // ---------- ticking ----------
   function startTick() {
-    clearInterval(tickTimer);
+    if (tickTimer) return;
     tickTimer = setInterval(() => {
-      let changed = false;
-      if (state.clock.running) {
-        if (state.clock.mode === 'countdown' && state.clock.seconds > 0) { state.clock.seconds -= 1; changed = true; }
-        else if (state.clock.mode === 'countup') { state.clock.seconds += 1; changed = true; }
+      if (!state) return;
+      const shown = Sync.clockShown(state.clock);
+      const input = $('clockInput');
+      if (input && document.activeElement !== input) input.value = fmtClock(shown);
+      if (state.clock.running && state.clock.mode === 'countdown' && shown <= 0) {
+        state.clock.seconds = 0;
+        state.clock.running = false;
+        state.clock.anchor = 0;
+        renderClockPeriod();
+        send();
       }
-      if (state.meta.sport === 'basketball' && state.sportData.basketball.shotClockRunning && state.sportData.basketball.shotClock > 0) {
-        state.sportData.basketball.shotClock -= 1; changed = true;
+      const ball = state.sportData && state.sportData.basketball;
+      if (ball && ball.shotClockRunning && Sync.shotShown(ball) <= 0) {
+        ball.shotClock = 0;
+        ball.shotClockRunning = false;
+        ball.shotClockAnchor = 0;
+        renderBasketball();
+        send();
       }
-      if (changed) { renderClockPeriod(); send(); }
-    }, 1000);
+    }, 200);
   }
 
   // ---------- collapsible cards ----------
@@ -478,7 +703,7 @@
         periodLabel: state.period.label,
         periodNumber: state.period.number,
         clockMode: state.clock.mode,
-        clockSeconds: state.clock.seconds,
+        clockSeconds: Sync.clockShown(state.clock),
         clockRunning: state.clock.running
       };
       state.meta.preset = 'pregame';
@@ -489,6 +714,7 @@
       state.clock.mode = 'countdown';
       state.clock.running = false;
       state.clock.seconds = 900;
+      state.clock.anchor = 0;
       if (state.popup) state.popup.visible = false;
     }
 
@@ -501,6 +727,7 @@
         state.period.number = backup.periodNumber != null ? backup.periodNumber : state.period.number;
         state.clock.mode = backup.clockMode || 'countdown';
         state.clock.seconds = backup.clockSeconds != null ? backup.clockSeconds : DEFAULT_CLOCK[state.meta.sport];
+        state.clock.anchor = 0;
       } else {
         Object.assign(state.toggles, {
           showScore: true,
@@ -511,8 +738,10 @@
         state.period.label = DEFAULT_PERIOD_LABEL[state.meta.sport];
         state.clock.seconds = DEFAULT_CLOCK[state.meta.sport];
         state.clock.mode = 'countdown';
+        state.clock.anchor = 0;
       }
       state.clock.running = false;
+      state.clock.anchor = 0;
       state.pregameBackup = null;
     }
 
@@ -524,9 +753,13 @@
         state.toggles.showRank = keepRank;
         state.period.label = 'TIME TILL START';
         state.clock.mode = 'countdown';
+        state.clock.anchor = 0;
       } else {
         Object.assign(state.toggles, SPORT_TOGGLE_DEFAULTS[state.meta.sport]);
-        if (!state.clock.running) state.clock.seconds = DEFAULT_CLOCK[state.meta.sport];
+        if (!state.clock.running) {
+          state.clock.seconds = DEFAULT_CLOCK[state.meta.sport];
+          state.clock.anchor = 0;
+        }
         state.period.label = DEFAULT_PERIOD_LABEL[state.meta.sport];
       }
       renderAll(); send();
@@ -542,10 +775,27 @@
     };
 
     $('saveBtn').onclick = () => {
-      if (!ws || ws.readyState !== WebSocket.OPEN || !state) return;
+      if (!state) return;
+      clearTimeout(netTimer);
+      flushLocal();
       const btn = $('saveBtn');
+      if (!ws || ws.readyState !== WebSocket.OPEN || !synced) {
+        btn.textContent = 'Saved on this device';
+        btn.classList.add('on');
+        clearTimeout(btn._saveTimer);
+        btn._saveTimer = setTimeout(() => {
+          btn.textContent = 'Save';
+          btn.classList.remove('on');
+        }, 1400);
+        return;
+      }
       btn.textContent = 'Saving…';
-      ws.send(JSON.stringify({ type: 'save', state }));
+      const includeLogos = logosPending;
+      ws.send(JSON.stringify({ type: 'save', state }, (key, value) => {
+        if (!includeLogos && key === 'logo') return undefined;
+        return value;
+      }));
+      if (includeLogos) logosPending = false;
     };
 
     $('resetBtn').onclick = () => {
@@ -555,12 +805,12 @@
       state.teams.home.fouls = 0; state.teams.away.fouls = 0;
       state.teams.home.setsWon = 0; state.teams.away.setsWon = 0;
       state.possession = null;
-      state.clock = { seconds: DEFAULT_CLOCK[state.meta.sport], running: false, mode: state.clock.mode };
+      state.clock = { seconds: DEFAULT_CLOCK[state.meta.sport], running: false, mode: state.clock.mode, anchor: 0 };
       state.period.label = DEFAULT_PERIOD_LABEL[state.meta.sport];
       state.period.number = 1;
       state.sportData = {
         football: { down: 1, distance: 10, yardLine: 50, ballSide: 'home' },
-        basketball: { shotClock: 24, shotClockRunning: false, bonus: { home: false, away: false } },
+        basketball: { shotClock: 24, shotClockRunning: false, shotClockAnchor: 0, bonus: { home: false, away: false } },
         baseball: { inning: 1, half: 'top', balls: 0, strikes: 0, outs: 0, runners: { first: false, second: false, third: false } },
         soccer: { half: 1, stoppage: 0 },
         volleyball: { currentSet: 1 }
@@ -569,12 +819,33 @@
     };
 
     // logos
-    $('eventLogoInput').onchange = async (e) => { if (e.target.files[0]) { state.event.logo = await fileToDataUrl(e.target.files[0]); renderAll(); send(); } };
-    $('eventLogoClear').onclick = () => { state.event.logo = null; renderAll(); send(); };
-    $('awayLogoInput').onchange = async (e) => { if (e.target.files[0]) { state.teams.away.logo = await fileToDataUrl(e.target.files[0]); renderAll(); send(); } };
-    $('awayLogoClear').onclick = () => { state.teams.away.logo = null; renderAll(); send(); };
-    $('homeLogoInput').onchange = async (e) => { if (e.target.files[0]) { state.teams.home.logo = await fileToDataUrl(e.target.files[0]); renderAll(); send(); } };
-    $('homeLogoClear').onclick = () => { state.teams.home.logo = null; renderAll(); send(); };
+    $('eventLogoInput').onchange = async (e) => {
+      if (!e.target.files[0]) return;
+      state.event.logo = await readLogo(e.target.files[0]);
+      logosPending = true;
+      rememberLogos();
+      renderAll();
+      send();
+    };
+    $('eventLogoClear').onclick = () => { state.event.logo = null; logosPending = true; rememberLogos(); renderAll(); send(); };
+    $('awayLogoInput').onchange = async (e) => {
+      if (!e.target.files[0]) return;
+      state.teams.away.logo = await readLogo(e.target.files[0]);
+      logosPending = true;
+      rememberLogos();
+      renderAll();
+      send();
+    };
+    $('awayLogoClear').onclick = () => { state.teams.away.logo = null; logosPending = true; rememberLogos(); renderAll(); send(); };
+    $('homeLogoInput').onchange = async (e) => {
+      if (!e.target.files[0]) return;
+      state.teams.home.logo = await readLogo(e.target.files[0]);
+      logosPending = true;
+      rememberLogos();
+      renderAll();
+      send();
+    };
+    $('homeLogoClear').onclick = () => { state.teams.home.logo = null; logosPending = true; rememberLogos(); renderAll(); send(); };
 
     // team names / colors / records / ranks
     $('awayName').oninput = () => { state.teams.away.name = $('awayName').value || 'AWAY'; renderScore(); send(); };
@@ -629,6 +900,8 @@
       send();
     };
 
+    initFontSliders();
+
     // special stats popup
     $('popupTitle').oninput = () => { ensurePopupShape(); state.popup.title = $('popupTitle').value; send(); };
     $('popupSubject').oninput = () => { ensurePopupShape(); state.popup.subject = $('popupSubject').value; send(); };
@@ -659,10 +932,31 @@
     };
 
     // clock
-    $('clockStartStop').onclick = () => { state.clock.running = !state.clock.running; renderClockPeriod(); send(); };
-    $('clockReset').onclick = () => { state.clock.seconds = DEFAULT_CLOCK[state.meta.sport]; state.clock.running = false; renderClockPeriod(); send(); };
-    $('clockInput').onchange = () => { state.clock.seconds = parseClock($('clockInput').value); send(); };
-    $('clockMode').onchange = () => { state.clock.mode = $('clockMode').value; send(); };
+    $('clockStartStop').onclick = () => {
+      state.clock.seconds = Sync.clockShown(state.clock);
+      state.clock.running = !state.clock.running;
+      state.clock.anchor = state.clock.running ? Date.now() : 0;
+      renderClockPeriod();
+      send();
+    };
+    $('clockReset').onclick = () => {
+      state.clock.seconds = DEFAULT_CLOCK[state.meta.sport];
+      state.clock.running = false;
+      state.clock.anchor = 0;
+      renderClockPeriod();
+      send();
+    };
+    $('clockInput').onchange = () => {
+      state.clock.seconds = parseClock($('clockInput').value);
+      state.clock.anchor = state.clock.running ? Date.now() : 0;
+      send();
+    };
+    $('clockMode').onchange = () => {
+      state.clock.seconds = Sync.clockShown(state.clock);
+      state.clock.mode = $('clockMode').value;
+      state.clock.anchor = state.clock.running ? Date.now() : 0;
+      send();
+    };
     $('periodInput').onchange = () => { state.period.label = $('periodInput').value; send(); };
     $('periodPrev').onclick = () => { state.period.number = Math.max(1, state.period.number - 1); send(); };
     $('periodNext').onclick = () => { state.period.number = state.period.number + 1; send(); };
@@ -695,9 +989,26 @@
     $('yardPlus').onclick = () => { state.sportData.football.yardLine = Math.min(50, state.sportData.football.yardLine + 1); renderFootball(); send(); };
 
     // basketball
-    $('shotStartStop').onclick = () => { state.sportData.basketball.shotClockRunning = !state.sportData.basketball.shotClockRunning; renderBasketball(); send(); };
-    $('shot24').onclick = () => { state.sportData.basketball.shotClock = 24; send(); };
-    $('shot14').onclick = () => { state.sportData.basketball.shotClock = 14; send(); };
+    $('shotStartStop').onclick = () => {
+      const ball = state.sportData.basketball;
+      ball.shotClock = Sync.shotShown(ball);
+      ball.shotClockRunning = !ball.shotClockRunning;
+      ball.shotClockAnchor = ball.shotClockRunning ? Date.now() : 0;
+      renderBasketball();
+      send();
+    };
+    $('shot24').onclick = () => {
+      const ball = state.sportData.basketball;
+      ball.shotClock = 24;
+      ball.shotClockAnchor = ball.shotClockRunning ? Date.now() : 0;
+      send();
+    };
+    $('shot14').onclick = () => {
+      const ball = state.sportData.basketball;
+      ball.shotClock = 14;
+      ball.shotClockAnchor = ball.shotClockRunning ? Date.now() : 0;
+      send();
+    };
     $('bonusAwayBtn').onclick = () => { state.sportData.basketball.bonus.away = !state.sportData.basketball.bonus.away; renderBasketball(); send(); };
     $('bonusHomeBtn').onclick = () => { state.sportData.basketball.bonus.home = !state.sportData.basketball.bonus.home; renderBasketball(); send(); };
 
@@ -745,5 +1056,14 @@
   }
 
   wire();
+  state = loadLocal();
+  if (state) {
+    suppressSend = true;
+    renderAll();
+    suppressSend = false;
+    startTick();
+    maybeShrinkLogos();
+  }
+  window.addEventListener('pagehide', flushLocal);
   connect();
 })();

@@ -19,6 +19,9 @@
   }
 
   function dots(container, used, total) {
+    if (container._used === used && container._total === total) return;
+    container._used = used;
+    container._total = total;
     container.innerHTML = '';
     for (let i = 0; i < total; i++) {
       const d = document.createElement('span');
@@ -28,6 +31,9 @@
   }
 
   function pips(container, litCount, totalCount) {
+    if (container._lit === litCount && container._total === totalCount) return;
+    container._lit = litCount;
+    container._total = totalCount;
     container.innerHTML = '';
     for (let i = 0; i < totalCount; i++) {
       const p = document.createElement('span');
@@ -37,8 +43,14 @@
   }
 
   function setLogo(imgEl, dataUrl) {
-    if (dataUrl) {
-      imgEl.src = dataUrl;
+    const next = dataUrl || '';
+    if (imgEl._logoUrl === next) {
+      imgEl.style.visibility = next ? 'visible' : 'hidden';
+      return;
+    }
+    imgEl._logoUrl = next;
+    if (next) {
+      imgEl.src = next;
       imgEl.style.visibility = 'visible';
     } else {
       imgEl.removeAttribute('src');
@@ -71,6 +83,15 @@
     const orientation = ['bottom', 'top', 'stack'].includes(a.orientation) ? a.orientation : 'bottom';
     bug.classList.remove('orient-bottom', 'orient-top', 'orient-stack');
     bug.classList.add('orient-' + orientation);
+
+    const periodSize = Number(a.fonts && a.fonts.period != null ? a.fonts.period : a.periodFontSize);
+    const periodPx = Number.isFinite(periodSize) ? Math.min(36, Math.max(8, Math.round(periodSize))) : 11;
+    root.style.setProperty('--period-font-size', periodPx + 'px');
+    window.ScorebugSync.FONT_CONTROLS.forEach((item) => {
+      let value = a.fonts && a.fonts[item.key];
+      if (value == null && item.key === 'period') value = a.periodFontSize;
+      root.style.setProperty(item.css, window.ScorebugSync.clampFont(item, value) + 'px');
+    });
   }
 
   function formatRecord(team, toggles) {
@@ -84,8 +105,9 @@
 
   function fitTeamName(nameEl, rowEl) {
     if (!nameEl || !rowEl) return;
-    const maxPx = 16;
-    const minPx = 11;
+    const chosen = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--font-team-name'));
+    const maxPx = Number.isFinite(chosen) ? chosen : 16;
+    const minPx = Math.min(maxPx, Math.max(8, Math.round(maxPx * 0.7)));
     nameEl.style.fontSize = maxPx + 'px';
     // Available width = row width minus rank (if shown)
     const rankEl = rowEl.querySelector('.team-rank');
@@ -124,8 +146,13 @@
       recordEl.classList.remove('show');
     }
 
-    // Fit after layout settles
-    requestAnimationFrame(() => fitTeamName(nameEl, rowEl));
+    const fonts = state && state.appearance && state.appearance.fonts;
+    const nameSize = fonts && fonts.teamName != null ? fonts.teamName : 16;
+    const fitKey = nameEl.textContent + '|' + rankEl.textContent + '|' + recordEl.textContent + '|' + nameSize;
+    if (nameEl._fitKey !== fitKey) {
+      nameEl._fitKey = fitKey;
+      requestAnimationFrame(() => fitTeamName(nameEl, rowEl));
+    }
   }
 
   function clearCelebrations() {
@@ -216,17 +243,25 @@
     }
   }
 
+  let popupSig = '';
   function renderPopup(popup) {
     const el = document.getElementById('bugPopup');
     if (!popup || !popup.visible) {
-      el.classList.remove('visible');
-      el.classList.add('hidden');
+      if (!el.classList.contains('hidden')) {
+        el.classList.remove('visible');
+        el.classList.add('hidden');
+      }
+      popupSig = '';
       return;
     }
 
     const title = (popup.title || '').trim();
     const subject = (popup.subject || '').trim();
     const stats = (popup.stats || []).filter((row) => (row.label || '').trim() || (row.value || '').trim());
+    const sig = title + '\n' + subject + '\n' + stats.map((row) => (row.label || '') + '=' + (row.value || '')).join('|');
+    const opening = !el.classList.contains('visible');
+    if (sig === popupSig && !opening) return;
+    popupSig = sig;
 
     document.getElementById('popupTitle').textContent = title;
     document.getElementById('popupTitle').style.display = title ? 'block' : 'none';
@@ -250,9 +285,10 @@
     });
 
     el.classList.remove('hidden');
-    // Force reflow so transition runs
-    void el.offsetWidth;
-    el.classList.add('visible');
+    if (opening) {
+      void el.offsetWidth;
+      el.classList.add('visible');
+    }
   }
 
   function render() {
@@ -307,7 +343,7 @@
     // Keep slot sized when cutout is on so the camera window stays open
     const showDigitalClock = !clockCutout && t.showClock && s.clock.mode !== 'hidden';
     clockEl.style.display = (clockCutout || showDigitalClock) ? 'block' : 'none';
-    clockEl.textContent = fmtClock(s.clock.seconds);
+    clockEl.textContent = fmtClock(window.ScorebugSync.clockShown(s.clock));
 
     renderPopup(s.popup);
     maybePlayCelebration(s.celebration);
@@ -346,7 +382,7 @@
         `FOULS ${s.teams.away.fouls} \u2013 ${s.teams.home.fouls}`;
     }
     if (sub.subShotClock) {
-      document.getElementById('shotClockVal').textContent = Math.max(0, Math.round(s.sportData.basketball.shotClock));
+      document.getElementById('shotClockVal').textContent = Math.max(0, Math.round(window.ScorebugSync.shotShown(s.sportData.basketball)));
     }
     if (sub.subBonus) {
       const b = s.sportData.basketball.bonus;
@@ -371,37 +407,31 @@
     }
   }
 
+  function paintClock() {
+    if (!state) return;
+    const clockEl = document.getElementById('clockDisplay');
+    if (clockEl) clockEl.textContent = fmtClock(window.ScorebugSync.clockShown(state.clock));
+    const shotEl = document.getElementById('shotClockVal');
+    const ball = state.sportData && state.sportData.basketball;
+    if (shotEl && ball) shotEl.textContent = String(Math.max(0, Math.round(window.ScorebugSync.shotShown(ball))));
+  }
+
   function startLocalTick() {
     clearInterval(tickTimer);
-    tickTimer = setInterval(() => {
-      if (!state) return;
-      let changed = false;
-      if (state.clock.running) {
-        if (state.clock.mode === 'countdown' && state.clock.seconds > 0) {
-          state.clock.seconds -= 1;
-          changed = true;
-        } else if (state.clock.mode === 'countup') {
-          state.clock.seconds += 1;
-          changed = true;
-        }
-      }
-      if (state.meta.sport === 'basketball' && state.sportData.basketball.shotClockRunning && state.sportData.basketball.shotClock > 0) {
-        state.sportData.basketball.shotClock -= 1;
-        changed = true;
-      }
-      if (changed) render();
-    }, 1000);
+    tickTimer = setInterval(paintClock, 200);
   }
 
   function connect() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${location.host}`);
     ws.onmessage = (evt) => {
-      const msg = JSON.parse(evt.data);
-      if (msg.type === 'state') {
-        state = msg.state;
-        render();
-      }
+      let msg;
+      try { msg = JSON.parse(evt.data); } catch (e) { return; }
+      if (msg.type !== 'state' || !msg.state) return;
+      if (!state) state = msg.state;
+      else if (window.ScorebugSync.isNewer(msg.state, state)) state = window.ScorebugSync.deepMerge(state, msg.state);
+      else return;
+      render();
     };
     ws.onclose = () => setTimeout(connect, 1500);
     ws.onerror = () => ws.close();

@@ -4,6 +4,7 @@ const WebSocket = require('ws');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const Sync = require('./public/sync.js');
 
 const PORT = process.env.PORT || 4173;
 const STATE_FILE = path.join(__dirname, 'state.json');
@@ -26,7 +27,7 @@ function defaultTeam(overrides) {
 
 function defaultState() {
   return {
-    meta: { sport: 'football', visible: true, preset: 'live' },
+    meta: { sport: 'football', visible: true, preset: 'live', rev: 0, updatedAt: 0 },
     pregameBackup: null,
     event: { logo: null, name: 'FRIDAY NIGHT' },
     teams: {
@@ -34,11 +35,11 @@ function defaultState() {
       away: defaultTeam({ name: 'AWAY', color: '#D6483C' })
     },
     period: { label: '1ST', number: 1 },
-    clock: { seconds: 720, running: false, mode: 'countdown' },
+    clock: { seconds: 720, running: false, mode: 'countdown', anchor: 0 },
     possession: null,
     sportData: {
       football: { down: 1, distance: 10, yardLine: 50, ballSide: 'home' },
-      basketball: { shotClock: 24, shotClockRunning: false, bonus: { home: false, away: false } },
+      basketball: { shotClock: 24, shotClockRunning: false, shotClockAnchor: 0, bonus: { home: false, away: false } },
       baseball: { inning: 1, half: 'top', balls: 0, strikes: 0, outs: 0, runners: { first: false, second: false, third: false } },
       soccer: { half: 1, stoppage: 0 },
       volleyball: { currentSet: 1 }
@@ -46,7 +47,9 @@ function defaultState() {
     appearance: {
       panelColor: '#0F1218',
       panelOpacity: 0.94,
-      orientation: 'bottom'
+      orientation: 'bottom',
+      periodFontSize: 11,
+      fonts: Sync.defaultFonts()
     },
     popup: {
       visible: false,
@@ -85,30 +88,8 @@ function defaultState() {
   };
 }
 
-function isPlainObject(v) {
-  return v !== null && typeof v === 'object' && !Array.isArray(v);
-}
-
-function deepMerge(base, patch) {
-  if (!isPlainObject(base)) return patch !== undefined ? patch : base;
-  const out = { ...base };
-  if (!isPlainObject(patch)) return out;
-  for (const key of Object.keys(patch)) {
-    const bv = base[key];
-    const pv = patch[key];
-    if (Array.isArray(pv)) {
-      out[key] = pv;
-    } else if (isPlainObject(bv) && isPlainObject(pv)) {
-      out[key] = deepMerge(bv, pv);
-    } else if (pv !== undefined) {
-      out[key] = pv;
-    }
-  }
-  return out;
-}
-
 function normalizeState(raw) {
-  const merged = deepMerge(defaultState(), raw || {});
+  const merged = Sync.deepMerge(defaultState(), raw || {});
   // Ensure popup always has 4 stat rows
   const stats = Array.isArray(merged.popup.stats) ? merged.popup.stats.slice(0, 4) : [];
   while (stats.length < 4) stats.push({ label: '', value: '' });
@@ -116,37 +97,108 @@ function normalizeState(raw) {
     label: row && row.label != null ? String(row.label) : '',
     value: row && row.value != null ? String(row.value) : ''
   }));
+  const savedFonts = raw && raw.appearance && raw.appearance.fonts;
+  Sync.FONT_CONTROLS.forEach((item) => {
+    let value = savedFonts && savedFonts[item.key];
+    if (value == null && item.key === 'period' && raw && raw.appearance) value = raw.appearance.periodFontSize;
+    merged.appearance.fonts[item.key] = Sync.clampFont(item, value);
+  });
+  merged.appearance.periodFontSize = merged.appearance.fonts.period;
   return merged;
 }
 
-function loadState() {
+function tryLoad(file) {
   try {
-    const raw = fs.readFileSync(STATE_FILE, 'utf8');
-    return normalizeState(JSON.parse(raw));
+    const raw = fs.readFileSync(file, 'utf8');
+    if (!raw || !raw.trim()) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.teams || !parsed.meta || !parsed.clock) return null;
+    return normalizeState(parsed);
   } catch (e) {
-    return defaultState();
+    return null;
   }
+}
+
+function loadState() {
+  const main = tryLoad(STATE_FILE);
+  if (main) return main;
+  const backup = tryLoad(STATE_FILE + '.bak');
+  if (backup) {
+    console.warn('state.json was unreadable. Restored the last good save.');
+    return backup;
+  }
+  return defaultState();
 }
 
 let currentState = loadState();
 let saveTimer = null;
-function persist() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    writeStateFile(currentState);
-  }, 150);
+let writeChain = Promise.resolve();
+
+function writeAtomic(state) {
+  return new Promise((resolve) => {
+    let json;
+    try {
+      json = JSON.stringify(state);
+    } catch (e) {
+      console.error('Failed to save state:', e.message);
+      return resolve(e);
+    }
+    const tmp = STATE_FILE + '.tmp';
+    const bak = STATE_FILE + '.bak';
+    fs.writeFile(tmp, json, (err) => {
+      if (err) {
+        console.error('Failed to save state:', err.message);
+        return resolve(err);
+      }
+      fs.copyFile(STATE_FILE, bak, () => {
+        fs.rename(tmp, STATE_FILE, (renameErr) => {
+          if (!renameErr) return resolve(null);
+          fs.copyFile(tmp, STATE_FILE, (copyErr) => {
+            fs.unlink(tmp, () => {
+              if (copyErr) console.error('Failed to save state:', copyErr.message);
+              resolve(copyErr || null);
+            });
+          });
+        });
+      });
+    });
+  });
 }
 
-function writeStateFile(state, cb) {
-  fs.writeFile(STATE_FILE, JSON.stringify(state, null, 2), (err) => {
-    if (err) console.error('Failed to save state:', err.message);
+function enqueueWrite(cb) {
+  const snapshot = currentState;
+  writeChain = writeChain.then(() => writeAtomic(snapshot)).then((err) => {
     if (cb) cb(err);
   });
 }
 
+function persist() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => enqueueWrite(), 400);
+}
+
 function persistNow(cb) {
   clearTimeout(saveTimer);
-  writeStateFile(currentState, cb);
+  enqueueWrite(cb);
+}
+
+function hasOwn(obj, key) {
+  return !!obj && Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function messageIncludesLogos(state) {
+  if (!state) return false;
+  return hasOwn(state.event, 'logo')
+    || (state.teams && (hasOwn(state.teams.home, 'logo') || hasOwn(state.teams.away, 'logo')));
+}
+
+function applyIncoming(incoming) {
+  if (!incoming || typeof incoming !== 'object') return null;
+  if (!Sync.isNewer(incoming, currentState)) return null;
+  const includeLogos = messageIncludesLogos(incoming);
+  currentState = normalizeState(Sync.deepMerge(currentState, incoming));
+  persist();
+  return includeLogos;
 }
 
 const app = express();
@@ -162,17 +214,23 @@ app.get('/api/state', (req, res) => res.json(currentState));
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-function broadcast(data, exclude) {
-  const msg = JSON.stringify(data);
+function pack(state, includeLogos) {
+  return JSON.stringify({ type: 'state', state }, (key, value) => {
+    if (!includeLogos && key === 'logo') return undefined;
+    return value;
+  });
+}
+
+function broadcast(payload, exclude) {
   wss.clients.forEach((client) => {
     if (client !== exclude && client.readyState === WebSocket.OPEN) {
-      client.send(msg);
+      client.send(payload);
     }
   });
 }
 
 wss.on('connection', (ws) => {
-  ws.send(JSON.stringify({ type: 'state', state: currentState }));
+  ws.send(pack(currentState, true));
 
   ws.on('message', (raw) => {
     let msg;
@@ -182,11 +240,15 @@ wss.on('connection', (ws) => {
       return;
     }
     if (msg.type === 'state' && msg.state) {
-      currentState = normalizeState(msg.state);
-      persist();
-      broadcast({ type: 'state', state: currentState }, ws);
+      const includeLogos = applyIncoming(msg.state);
+      if (includeLogos === null) return;
+      broadcast(pack(currentState, includeLogos), ws);
     } else if (msg.type === 'save') {
-      if (msg.state) currentState = normalizeState(msg.state);
+      let includeLogos = false;
+      if (msg.state) {
+        const applied = applyIncoming(msg.state);
+        if (applied !== null) includeLogos = applied;
+      }
       persistNow((err) => {
         ws.send(JSON.stringify({
           type: 'saved',
@@ -194,11 +256,7 @@ wss.on('connection', (ws) => {
           error: err ? err.message : null
         }));
       });
-      broadcast({ type: 'state', state: currentState }, ws);
-    } else if (msg.type === 'reset') {
-      currentState = defaultState();
-      persist();
-      broadcast({ type: 'state', state: currentState });
+      broadcast(pack(currentState, includeLogos), ws);
     }
   });
 });
